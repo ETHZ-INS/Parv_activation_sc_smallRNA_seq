@@ -6,5 +6,3 @@ snakemake --configfile config.yaml
 ```
 
 [Snakemake analysis workflow](analysis_rg.png)
-
-
