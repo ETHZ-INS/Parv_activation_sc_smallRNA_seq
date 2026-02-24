@@ -1,0 +1,325 @@
+---
+title: "02. Overview plots"
+params: 
+  se_dir: "data/se.rds"
+  out_plots_dir: "plots"
+  out_data_dir: "data"
+  filtered_data_dir: "filtered"
+output:
+  html_document:
+    theme: cerulean
+    toc: yes
+    toc_float: yes
+    smooth_scroll: yes
+  pdf_document:
+    toc: yes
+---
+
+```{r setup}
+suppressPackageStartupMessages({
+  library(SummarizedExperiment)
+  library(edgeR)
+  library(ggplot2)
+  library(ggrepel)
+  library(patchwork)
+  library(data.table)
+  library(viridis)
+  library(PCAtools)
+  library(DESeq2)
+  library(haven)
+})
+
+# Color-blind friendly palettes
+cbbPalette <- c("#E69F00", "#56B4E9", "#009E73", "#F0E442", 
+                "#0072B2", "#D55E00", "#CC79A7")
+filtDir <- params$filtered_data_dir
+outPlotDir <- params$out_plots_dir
+outDir <- params$out_data_dir
+```
+
+## Overview Plots
+
+### Import SE
+
+```{r, import se}
+if(!dir.exists("plots")) dir.create("plots")
+seDir <- params$se_dir
+se <- readRDS(seDir)
+```
+
+### Comparison Batch2 & Batch3
+
+```{r}
+se <- readRDS(seDir)
+seRepSub <- se[, (se$actual_cell_name %in% paste0("E", 24:31))]
+seRepSub <- seRepSub[grepl("miRNA", rownames(seRepSub)) | grepl("miR", rownames(seRepSub))]
+cd <- as.data.frame(colData(seRepSub))
+mapDt <- data.table(cell=colnames(seRepSub),
+                    cell_name=seRepSub$actual_cell_name,
+                    batch=seRepSub$batch,
+                    to_be_removed=seRepSub$to_be_removed,
+                    n_clean_reads=cd$Clean_Reads,
+                    n_miRNA=colSums(assays(seRepSub)$counts),
+                    n_unique_miRNA=colSums(assays(seRepSub)$counts>0), 
+                    n_match_genome=cd$Match_Genome,
+                    isActivated=cd$isActivated)
+mapDt[,mapping_rate:=n_match_genome/n_clean_reads]
+mapDt[,miRNA_mapping_rate:=n_miRNA/n_clean_reads]
+mapDt[,batch:=factor(batch)]
+
+p1 <- ggplot(mapDt, aes(x=cell_name, fill=batch, color=batch, y=n_miRNA))+
+      geom_col(position = position_dodge(1))+
+      labs(x="Samples", y="Number of reads mapping to miRNAs")+
+      scale_fill_manual(values=cbbPalette)+
+      scale_color_manual(values=cbbPalette)+
+      theme_bw()
+p2 <- ggplot(mapDt, aes(x=cell_name, fill=batch, color=batch, y=miRNA_mapping_rate))+
+      geom_col(position = position_dodge(1))+
+      labs(x="Samples", y="Rate of matching reads mapping to miRNAs")+
+      scale_fill_manual(values=cbbPalette)+
+      scale_color_manual(values=cbbPalette)+
+      theme_bw()
+p3 <- ggplot(mapDt, aes(x=cell_name, fill=batch, color=batch, y=n_unique_miRNA))+
+      geom_col(position = position_dodge(1))+
+      labs(x="Samples", y="Number of unique miRNAs detected")+
+      scale_fill_manual(values=cbbPalette)+
+      scale_color_manual(values=cbbPalette)+
+      theme_bw()
+
+p1 + p2 + p3 + plot_layout(guides = "collect")
+ggsave(file.path(outPlotDir, "01.1_comparison_miRNA_bar.png"), width=35, height=10, units="cm")
+
+p1 <- ggplot(mapDt, aes(x=cell_name, fill=batch, color=batch, y=n_clean_reads))+
+      geom_col(position = position_dodge(1))+
+      labs(x="Samples", y="Number of clean reads")+
+      scale_fill_manual(values=cbbPalette)+
+      scale_color_manual(values=cbbPalette)+
+      theme_bw()
+p2 <- ggplot(mapDt, aes(x=cell_name, fill=batch, color=batch, y=mapping_rate))+
+      geom_col(position = position_dodge(1))+
+      labs(x="Samples", y="Rate of reads mapping to the genome")+
+      scale_fill_manual(values=cbbPalette)+
+      scale_color_manual(values=cbbPalette)+
+      theme_bw()
+p1 + p2 + plot_layout(guides = "collect")
+ggsave(file.path(outPlotDir, "01.1_comparison_overall_bar.png"), width=25, height=10, units="cm")
+
+mapCompDt <- dcast(mapDt, cell_name~batch, value.var="n_miRNA")
+p1 <- ggplot(mapCompDt, aes(x=`2`, y=`3`))+
+      geom_point()+
+      geom_text_repel(aes(label=cell_name))+
+      geom_abline(slope=1, intercept=0, linetype="dashed")+
+      xlim(c(0,3000))+
+      ylim(c(0,3000))+
+      labs(x="Batch 2", y="Batch 3", title="Number of reads mapping to miRNAs")+
+      theme_bw()
+mapCompDt <- dcast(mapDt, cell_name~batch, value.var="miRNA_mapping_rate")
+p2 <- ggplot(mapCompDt, aes(x=`2`, y=`3`))+
+      geom_point()+
+      geom_text_repel(aes(label=cell_name))+
+      geom_abline(slope=1, intercept=0, linetype="dashed")+
+      xlim(c(0.005,0.011))+
+      ylim(c(0.005,0.011))+
+      labs(x="Batch 2", y="Batch 3", title="Rate of matching reads mapping to miRNAs")+
+      theme_bw()
+mapCompDt <- dcast(mapDt, cell_name~batch, value.var="n_unique_miRNA")
+p3 <- ggplot(mapCompDt, aes(x=`2`, y=`3`))+
+      geom_point()+
+      geom_text_repel(aes(label=cell_name))+
+      geom_abline(slope=1, intercept=0, linetype="dashed")+
+      xlim(c(100,420))+
+      ylim(c(100,420))+
+      labs(x="Batch 2", y="Batch 3", title="Number of unique miRNAs detected")+
+      theme_bw()
+p1 + p2 + p3 + plot_layout(guides = "collect")
+ggsave(file.path(outPlotDir, "01.1_comparison_miRNA_scatter.png"), width=35, height=10, units="cm")
+```
+
+### Quality Control
+
+#### Read Filtering Stats
+
+```{r, to be done}
+filtStats <- list.files(filtDir, 
+                        pattern="filtering_stats_*", 
+                        recursive=TRUE)
+filtStats <- lapply(filtStats, fread)
+```
+
+#### Mapping rates
+
+Per-sample:
+```{r, fig.width=8, fig.height=12}
+seSub <- se[grepl("miRNA", rownames(se)) | grepl("miR", rownames(se))]
+cd <- as.data.frame(colData(se))
+mapDt <- data.table(cell=colnames(se),
+                    cell_name=se$actual_cell_name,
+                    batch=se$batch,
+                    to_be_removed=se$to_be_removed,
+                    n_clean_reads=cd$Clean_Reads,
+                    n_miRNA=colSums(assays(seSub)$counts),
+                    n_match_genome=cd$Match_Genome,
+                    isActivated=cd$isActivated)
+mapDt[,mapping_rate:=n_match_genome/n_clean_reads]
+
+setorder(mapDt, -mapping_rate)
+ggplot(mapDt, aes(x=cell_name, y=mapping_rate, fill=isActivated)) + geom_col() + 
+  labs(x="Samples", y="Mapping rate")+
+  facet_grid(cols=vars(batch), scales="free_x")+
+  scale_fill_manual(values=cbbPalette)+
+  scale_x_discrete(guide=guide_axis(n.dodge=2))+
+  geom_hline(yintercept=0.4, linetype="dashed")+
+  theme_bw()
+ggsave(file.path(outPlotDir, "01.1_mapping_rate.png"), 
+       width=30, height=12, units="cm")
+
+setorder(mapDt, -n_match_genome)
+mapDt$cell_name <- factor(mapDt$cell_name, 
+                          levels=c(setdiff(unique(mapDt$cell_name), 
+                                           "N. Control"),
+                                   "N. Control"), ordered=TRUE)
+p1 <- ggplot(mapDt, aes(x=cell_name, y=n_match_genome, fill=isActivated)) + geom_col() + 
+  labs(x="Samples", y="Number of reads matching to genome")+
+  scale_fill_manual(values=cbbPalette)+
+  facet_grid(cols=vars(batch), scales="free_x")+
+  scale_x_discrete(guide=guide_axis(n.dodge=2))+
+  theme_bw()
+
+# Finally, between 10–50% of total reads matched annotated miRNA loci
+mapDt[,miRNA_mapping_rate:=n_miRNA/n_clean_reads]
+p2 <- ggplot(mapDt, aes(x=cell_name, y=miRNA_mapping_rate, fill=isActivated)) + geom_col() + 
+  labs(x="Samples", y="Rate of matching reads mapping to miRNAs")+
+  scale_fill_manual(values=cbbPalette)+
+  facet_grid(cols=vars(batch), scales="free_x")+
+  scale_x_discrete(guide=guide_axis(n.dodge=2))+
+  theme_bw()
+
+p3 <- ggplot(mapDt, aes(x=cell_name, y=n_miRNA, fill=isActivated)) + geom_col() + 
+  labs(x="Samples", y="Number of reads mapping to miRNAs")+
+  scale_fill_manual(values=cbbPalette)+
+  facet_grid(cols=vars(batch), scales="free_x")+
+  scale_x_discrete(guide=guide_axis(n.dodge=2))+
+  theme_bw()
+
+library(patchwork)
+p1 / p2 / p3 + plot_layout(guides = "collect")
+ggsave(file.path(outPlotDir, "01.1_miRNA_mapping.png"), width=30, height=26, units="cm")
+```
+
+### MA-Plots
+
+```{r}
+se <- se[grepl("miRNA", rownames(se)) | grepl("miR", rownames(se))]
+
+# remove non-covered samples
+se <- se[,!(se$to_be_removed) & 
+          !(se$actual_cell_name %in% c("E6", "E23"))]
+
+rownames(se) <- unlist(tstrsplit(rownames(se), "/", keep=2))
+assays(se)$counts <- floor(assays(se)$counts)
+
+dds <- edgeR::calcNormFactors(DGEList(assay(se), 
+                                      group=as.factor(se$isActivated)),
+                              method="TMMwsp")
+assays(se)$logcpm <- log1p(cpm(dds))
+saveRDS(se, file.path(outDir, "02_sports_se.rds"))
+
+limma::plotMA(assays(se)$logcpm,array = which(se$actual_cell_name=="E9"))
+limma::plotMA(assays(se)$logcpm,array = which(se$actual_cell_name=="E3"))
+
+limma::plotMA(assays(se)$logcpm,array =  which(se$actual_cell_name=="E18"))
+limma::plotMA(assays(se)$logcpm,array = which(se$actual_cell_name=="E19"))
+limma::plotMA(assays(se)$logcpm,array = which(se$actual_cell_name=="E11"))
+```
+
+### Activation groups
+
+#### MDS plots {.tabset}
+
+```{r}
+ddsSub <- dds[rowSums(dds$counts>0)>30,]
+
+mdsDims <- plotMDS(ddsSub, labels=se$isActivated, top=50)[c("x", "y")]
+mdsDt <- as.data.table(mdsDims)
+colnames(mdsDt) <- c("MDS1", "MDS2")
+mdsDt <- cbind(mdsDt, as.data.table(colData(se)))
+mdsDt <- cbind(mdsDt, colSums(assays(se)$counts))
+setnames(mdsDt, "V2", "lib_size")
+mdsDt$isActivated <- factor(mdsDt$isActivated)
+
+cor(mdsDt$Clean_Reads, mdsDt$lib_size)
+```
+
+##### Batch 
+```{r}
+# double check ordering: names(mdsDims$y)==colData(se)$Vp
+ggplot(mdsDt, aes(x=MDS1, y=MDS2, color=as.factor(batch)))+
+geom_point(size=2)+
+geom_text_repel(aes(label=actual_cell_name))+
+scale_color_manual(values=cbbPalette)+
+guides(color=guide_legend(title="Batch"))+
+theme_bw()
+```
+
+
+##### Group 
+```{r}
+# double check ordering: names(mdsDims$y)==colData(se)$Vp
+ggplot(mdsDt, aes(x=MDS1, y=MDS2, color=isActivated))+
+geom_point(size=2)+
+scale_color_manual(values=cbbPalette)+
+guides(color=guide_legend(title="Activation"))+
+theme_bw()
+```
+
+#### PCA {.tabset}
+
+Check further components of PCA plot
+```{r}
+# remove low count rows
+lcpmSub <- assays(se)$logcpm 
+lcpmSub <- lcpmSub[rowSums(lcpmSub>0)>30,]
+pcaCpm <- pca(lcpmSub, metadata=colData(se))
+pcaCompCpm <- cbind(pcaCpm$rotated[,paste0("PC", 1:10)], colData(se))
+pcaCompCpm$isActivated <- as.factor(pcaCompCpm$isActivated)
+```
+
+##### Group
+
+```{r}
+ggplot(pcaCompCpm, aes(x=PC1, y=PC2, color=isActivated))+
+geom_point(size=2)+
+guides(color=guide_legend(title="Activation"))+
+scale_color_manual(values=cbbPalette)+
+theme_bw()  
+  
+ggplot(pcaCompCpm, aes(x=PC3, y=PC4, color=isActivated))+
+geom_point(size=2)+
+guides(color=guide_legend(title="Activation"))+
+scale_color_manual(values=cbbPalette)+
+theme_bw()  
+```
+
+##### Batch
+
+```{r}
+ggplot(pcaCompCpm, aes(x=PC1, y=PC2, color=as.factor(batch)))+
+geom_point(size=2)+
+geom_text_repel(aes(label=actual_cell_name))+
+guides(color=guide_legend(title="Batch"))+
+scale_color_manual(values=cbbPalette)+
+theme_bw()  
+  
+ggplot(pcaCompCpm, aes(x=PC3, y=PC4, color=as.factor(batch)))+
+geom_point(size=2)+
+geom_text_repel(aes(label=actual_cell_name))+
+guides(color=guide_legend(title="Batch"))+
+scale_color_manual(values=cbbPalette)+
+theme_bw()  
+```
+
+## Session info
+
+```{r}
+sessionInfo()
+```

@@ -1,0 +1,234 @@
+---
+title: "03. Differential Expression"
+params: 
+  se_dir: "data/se.rds"
+  out_plots_dir: "plots"
+  out_data_dir: "data"
+  filtered_data_dir: "filtered"
+output:
+  html_document:
+    theme: cerulean
+    toc: yes
+    toc_float: yes
+    smooth_scroll: yes
+  pdf_document:
+    toc: yes
+---
+
+```{r setup}
+suppressPackageStartupMessages({
+  library(SummarizedExperiment)
+  library(edgeR)
+  library(ggplot2)
+  library(patchwork)
+  library(data.table)
+  library(viridis)
+  library(PCAtools)
+  library(SEtools)
+  library(DESeq2)
+  library(haven)
+  library(sechm)
+  library(patchwork)
+})
+
+set.seed(42)
+
+# Color-blind friendly palettes
+cbbPalette <- c("#E69F00", "#56B4E9", "#009E73", "#F0E442", 
+                "#0072B2", "#D55E00", "#CC79A7")
+outDataDir <- params$out_data_dir
+outPlotDir <- params$out_plots_dir
+```
+
+## Overview Plots
+
+### Import SE
+
+```{r, se}
+seDir <- params$se_dir
+se <- readRDS(seDir)
+```
+
+### Normalization
+
+```{r}
+dds <- edgeR::calcNormFactors(DGEList(assay(se), 
+                                      group=as.factor(se$isActivated)), 
+                              method="TMMwsp")
+assays(se)$logcpm <- log1p(cpm(dds))
+dds <- dds[filterByExpr(dds, min.count=1, min.prop=0.5),] # group=se$isActivated
+```
+
+#### Surrogate variable analysis
+
+```{r, error=TRUE}
+se$batch <- as.factor(as.character(se$batch))
+se$isActivated <- as.factor(se$isActivated)
+
+# numSVmethod="leek" provided zero, default 2 SVs, 
+# decided based on PCA plot of corrected counts which removed the strong lib size effects
+se <- se[rowSums(assays(se)$counts>0)!=0,]
+se <- SEtools::svacor(se, form=~isActivated+batch,
+                          form0=~batch, 
+                          method="svaseq", 
+                          n.sv=1)
+pcaCor <- pca(assays(se)$corrected, removeVar = 0.1)
+pcaCorDt<- cbind(pcaCor$rotated[,paste0("PC", 1:10)], colData(se))
+
+ggplot(pcaCorDt, aes(x=PC1, y=PC2, color=isActivated))+
+geom_point(size=2)+
+scale_color_manual(values=cbbPalette)+
+theme_bw()
+
+ggplot(pcaCorDt, aes(x=PC1, y=PC2, color=batch))+
+geom_point(size=2)+
+scale_color_manual(values=cbbPalette)+
+theme_bw()
+
+mdsDims <- plotMDS(dds, labels=se$isActivated)[c("x", "y")]
+mdsDt <- as.data.table(mdsDims)
+colnames(mdsDt) <- c("MDS1", "MDS2")
+svDt <- cbind(as.data.table(colData(se)), mdsDt, colSums(assays(se)$counts)) #se$SV1, se$SV2
+setnames(svDt, c("V3"), c("lib_size"))
+cor(svDt$SV1, svDt$Clean_Reads)
+
+ggplot(svDt, aes(x=MDS1, y=MDS2, color=SV1))+
+geom_point(size=2)+
+scale_color_viridis_c()+
+theme_bw()
+
+ggplot(svDt, aes(x=MDS1, y=MDS2, color=isActivated))+
+geom_point(size=2)+
+scale_color_manual(values=cbbPalette)+
+theme_bw()
+
+ggplot(svDt, aes(x=MDS1, y=MDS2, color=as.factor(batch)))+
+geom_point(size=2)+
+scale_color_manual(values=cbbPalette)+
+theme_bw()
+
+cor(svDt$SV1, svDt$Clean_Reads)
+cor(svDt$SV1, svDt$lib_size)
+```
+
+## 1. Discrete condition: Differential expression analysis
+
+```{r, error=TRUE}
+mm <- model.matrix(~SV1+batch+isActivated, data=as.data.frame(colData(se)))
+dds <- estimateDisp(dds, mm)
+
+edgeR::plotBCV(dds)
+
+lrt <- as.data.frame(topTags(glmQLFTest(glmQLFit(dds,mm, coef="isActivatedpos"), 
+                                        coef="isActivatedpos"), Inf))
+lrt$feature <- row.names(lrt)
+rowData(se)$DEA.group_analysis <- lrt[match(rownames(se), lrt$feature),]
+attr(rowData(se)$DEA.group_analysis, "description") <- "Group comparsion: Activated (pos) vs non-activated (neg) cells"
+```
+
+Volcano Plot
+```{r, error=TRUE}
+lrt <- setorder(lrt, FDR)
+lrtTop <- head(lrt, 4)
+lrtTop10 <- head(lrt, 10)
+lrtPrior <- subset(lrt, feature %in% c("mmu-mir-128-1",
+                                       "mmu-mir-128-2", 
+                                       "mmu-mir-138-1",
+                                       "mmu-mir-138-2"))
+
+ggplot(lrt, aes(logFC,-log10(FDR), label=feature, colour=logCPM))+ 
+  scale_colour_viridis_c(direction=-1)+
+  geom_vline(xintercept=-0.5, linetype="dashed")+
+  geom_vline(xintercept=0.5, linetype="dashed")+
+  geom_hline(yintercept=-log10(0.05), linetype="dashed")+
+  geom_point(size=2)+ 
+  geom_text_repel(data=subset(lrt, feature %in% lrtTop$feature),
+                                aes(x=logFC, y=-log10(FDR), 
+                                    label=feature), 
+                                    color="black",
+                                    max.overlaps = Inf,
+                                    box.padding = 0.5,
+                                    key_glyph = "point")+
+  geom_text_repel(data=subset(lrt, feature %in% lrtPrior$feature),
+                                aes(x=logFC, y=-log10(FDR), 
+                                    label=feature), 
+                                    color="darkgrey",
+                                    max.overlaps = Inf,
+                                    box.padding = 0.5,
+                                    key_glyph = "point")+
+  ggtitle("Volcano Plot: Discrete condition (activated vs non-activated)")+
+  theme_bw()
+ggsave(file.path(outPlotDir, "02.1_volcano_plot_discrete.png"),
+       device="png", width=20, units="cm")
+
+ggplot(lrt, aes(logFC,-log10(PValue), label=feature, colour=logCPM))+ 
+  scale_colour_viridis_c(direction=-1)+
+  geom_vline(xintercept=-0.5, linetype="dashed")+
+  geom_vline(xintercept=0.5, linetype="dashed")+
+  geom_hline(yintercept=-log10(0.05), linetype="dashed")+
+  geom_point(size=2)+ 
+  geom_text_repel(data=subset(lrt, feature %in% lrtTop$feature),
+                                aes(x=logFC, y=-log10(PValue), 
+                                    label=feature), 
+                                    color="black",
+                                    max.overlaps = Inf,
+                                    box.padding = 0.5,
+                                    key_glyph = "point")+
+  geom_text_repel(data=subset(lrt, feature %in% lrtPrior$feature),
+                                aes(x=logFC, y=-log10(PValue), 
+                                    label=feature), 
+                                    color="darkgrey",
+                                    max.overlaps = Inf,
+                                    box.padding = 0.5,
+                                    key_glyph = "point")+
+  ggtitle("Volcano Plot: Discrete condition (activated vs non-activated)")+
+  theme_bw()
+ggsave(file.path(outPlotDir, "02.1_volcano_plot_discrete_pval.png"),
+       device="png", width=20, units="cm")
+```
+
+```{r, error=TRUE}
+se$isActivated <- as.factor(colData(se)$isActivated)
+se <- se[,order(colData(se)$isActivated)]
+rowData(se)$isTop <- fifelse(rownames(rowData(se)) %in% lrtTop10$feature, 
+                              "top 4", "preselected")
+
+png(filename=file.path(outPlotDir, "02.1_heatmap_cpm_discrete.png"), 
+    width=3.25,height=3.25,units="cm",res=1200)
+pdf(file=file.path(outPlotDir, "02.1_heatmap_cpm_discrete.pdf"))
+sechm(se, c(row.names(lrtTop), row.names(lrtPrior)), 
+      top_annotation=c("isActivated", "batch"),
+      gaps_row="isTop",
+      do.scale = TRUE, 
+      show_rownames=TRUE, 
+      row_names_gp=grid::gpar(fontsize=9))
+dev.off()
+
+png(filename=file.path(outPlotDir, "02.1_heatmap_cor_discrete.png"), 
+    width=3.25,height=3.25,units="cm",res=1200)
+pdf(file=file.path(outPlotDir, "02.1_heatmap_cor_discrete.pdf"))
+sechm(se, c(row.names(lrtTop), row.names(lrtPrior)), 
+      top_annotation=c("isActivated", "batch"),
+      gaps_row="isTop",
+      do.scale = TRUE, 
+      show_rownames=TRUE, 
+      assayName = "corrected",
+      row_names_gp=grid::gpar(fontsize=9))
+dev.off()
+```
+
+Provide as a list
+```{r, error=TRUE}
+lrt[order(lrt$PValue),]
+lrt$n_cells_found <- rowSums(assays(se)$counts[rownames(lrt),]>0)
+lrt$mean_counts <- rowMeans(assays(se)$counts[rownames(lrt),])
+lrt$name <- rownames(lrt)
+write.table(lrt, file=file.path(outDataDir, "02.1_miRNA_found.csv"), sep=",", 
+            quote=FALSE, row.names=FALSE)
+```
+
+## Session info
+
+```{r}
+sessionInfo()
+```

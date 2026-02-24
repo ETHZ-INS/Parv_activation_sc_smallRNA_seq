@@ -1,0 +1,95 @@
+---
+title: "01. Data processing"
+params:
+  sports_dir: "sports"
+  out_dir: "out_data"
+  meta_path: "meta.tsv"
+output:
+  html_document:
+    theme: cerulean
+    toc: yes
+    toc_float: yes
+    smooth_scroll: yes
+  pdf_document:
+    toc: yes
+---
+
+```{r setup}
+suppressPackageStartupMessages({
+  library(SummarizedExperiment)
+  library(data.table)
+  
+  source("utils.R")
+})
+```
+
+## Import data
+
+### Metadata
+
+```{r}
+metaPath <- params$meta_path
+meta <- fread(metaPath, col.names=c("isActivated", "actual_name", "fgcz_name", "batch"),
+              select=1:4, header=TRUE)
+meta[,fgcz_name:=fifelse(fgcz_name=="", actual_name, fgcz_name)]
+head(meta)
+```
+
+### Sports
+
+```{r}
+sportsDir <- params$sports_dir
+se <- readSports(sportsDir)
+
+colDt <- as.data.table(colData(se), keep.rownames=TRUE)
+colDt[,cell_name_full:=tstrsplit(rn, "-", keep=2)]
+colDt[,cell_name:=tstrsplit(cell_name_full, split="_", keep=1)]
+colDt[,cell_name_alt:=tstrsplit(cell_name_full, split="_", keep=2)]
+colDt[,cell_name:=fifelse(grepl("Lib", cell_name), cell_name_alt, cell_name)]
+
+metaBatch <- lapply(list.files(sportsDir), function(batchDir){
+  batchDt <- data.table(sample=basename(list.files(file.path(sportsDir, 
+                                                             batchDir), 
+                                          pattern="*_output.txt", 
+                                          recursive=TRUE)),
+                        batch=batchDir)
+  return(batchDt)
+})
+metaBatch <- rbindlist(metaBatch)
+metaBatch[,sample:=gsub("_output.txt", "", sample)]
+
+col2Dt <- merge(colDt, metaBatch, 
+                by.x=c("rn"), 
+                by.y=c("sample"), all.x=TRUE)
+col2Dt[,batch:=tstrsplit(batch, split="raw", keep=2, type.convert=TRUE)]
+col2Dt[,cell_id:=tstrsplit(cell_name, split="E", keep=2, type.convert=TRUE)]
+col2Dt[,actual_cell_name:=fifelse(batch==2 & cell_name %in% paste0("E", 1:22),
+                                  paste0("E", cell_id+23), cell_name)]
+col3Dt <- merge(col2Dt, meta, 
+                by.x=c("actual_cell_name", "batch"), 
+                by.y=c("actual_name", "batch"), 
+                all.x=TRUE)
+col3Dt[,to_be_removed:=fifelse(!complete.cases(col3Dt), TRUE, FALSE)]
+col3Dt[!complete.cases(col3Dt),]
+col3Dt <- col3Dt[,c("rn", "batch", "actual_cell_name", "to_be_removed", 
+                    "cell_name", "isActivated"), with=FALSE]
+setnames(col3Dt, c("rn", "cell_name"), c("sample_name", "fgcz_name"))
+
+colData(se)$actual_cell_name <- col3Dt[match(rownames(colData(se)), 
+                                             col3Dt$sample_name),]$actual_cell_name
+colData(se)$fgcz_name <- col3Dt[match(rownames(colData(se)), 
+                                      col3Dt$sample_name),]$fgcz_name
+colData(se)$isActivated <- col3Dt[match(rownames(colData(se)), 
+                                        col3Dt$sample_name),]$isActivated
+colData(se)$to_be_removed <- col3Dt[match(rownames(colData(se)), 
+                                          col3Dt$sample_name),]$to_be_removed
+colData(se)$batch <- col3Dt[match(rownames(colData(se)), 
+                                  col3Dt$sample_name),]$batch
+saveRDS(se, file=file.path(params$out_dir, "01_sports_se.rds"))
+```
+
+## Sessioninfo
+
+```{r, session info}
+sessionInfo()
+```

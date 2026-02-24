@@ -1,0 +1,5 @@
+project: Single-cell small-RNA-sequencing analysis
+
+Data_dir: data/
+Meta_path: meta_data_all.csv
+Ref_path: /reference/Mus_musculus/GRCm38.sports
