@@ -38,6 +38,13 @@ cbbPalette <- c("#E69F00", "#56B4E9", "#009E73", "#F0E442",
                 "#0072B2", "#D55E00", "#CC79A7")
 outDataDir <- params$out_data_dir
 outPlotDir <- params$out_plots_dir
+
+# TODO: Fix in main snakefile
+exSeq <- c("E25", "E27", "E29", "E43")
+exSpike <- c("E3", "E11", "E24", "E25", "E28", 
+             "E31", "E32", "E33", "E42", "E48", 
+             "E63", "E65") # E39 ? 
+exDepol <- c("E10", "E15", "E18","E49", "E52") 
 ```
 
 ## Overview Plots
@@ -72,23 +79,16 @@ se <- SEtools::svacor(se, form=~isActivated+batch,
                           form0=~batch, 
                           method="svaseq", 
                           n.sv=1)
-pcaCor <- pca(assays(se)$corrected, removeVar = 0.1)
-pcaCorDt<- cbind(pcaCor$rotated[,paste0("PC", 1:10)], colData(se))
+```
 
-ggplot(pcaCorDt, aes(x=PC1, y=PC2, color=isActivated))+
-geom_point(size=2)+
-scale_color_manual(values=cbbPalette)+
-theme_bw()
+##### MDS plots {.tabset}
 
-ggplot(pcaCorDt, aes(x=PC1, y=PC2, color=batch))+
-geom_point(size=2)+
-scale_color_manual(values=cbbPalette)+
-theme_bw()
-
-mdsDims <- plotMDS(dds, labels=se$isActivated)[c("x", "y")]
+###### Surrogate Variable
+```{r, error=TRUE}
+mdsDims <- plotMDS(assays(se)$logcpm, plot=FALSE)[c("x", "y")]
 mdsDt <- as.data.table(mdsDims)
 colnames(mdsDt) <- c("MDS1", "MDS2")
-svDt <- cbind(as.data.table(colData(se)), mdsDt, colSums(assays(se)$counts)) #se$SV1, se$SV2
+svDt <- cbind(as.data.table(colData(se)), mdsDt, colSums(assays(se)$counts))
 setnames(svDt, c("V3"), c("lib_size"))
 cor(svDt$SV1, svDt$Clean_Reads)
 
@@ -97,19 +97,195 @@ geom_point(size=2)+
 scale_color_viridis_c()+
 theme_bw()
 
-ggplot(svDt, aes(x=MDS1, y=MDS2, color=isActivated))+
-geom_point(size=2)+
-scale_color_manual(values=cbbPalette)+
-theme_bw()
+cor(svDt$SV1, svDt$Clean_Reads)
+cor(svDt$SV1, svDt$lib_size)
+```
+
+###### Batch
+```{r, error=TRUE}
+mdsDims <- plotMDS(assays(se)$corrected, plot=FALSE)[c("x", "y")]
+mdsDt <- as.data.table(mdsDims)
+colnames(mdsDt) <- c("MDS1", "MDS2")
+svDt <- cbind(as.data.table(colData(se)), mdsDt, colSums(assays(se)$counts))
+setnames(svDt, c("V3"), c("lib_size"))
 
 ggplot(svDt, aes(x=MDS1, y=MDS2, color=as.factor(batch)))+
 geom_point(size=2)+
 scale_color_manual(values=cbbPalette)+
 theme_bw()
-
-cor(svDt$SV1, svDt$Clean_Reads)
-cor(svDt$SV1, svDt$lib_size)
 ```
+
+###### Group
+```{r, error=TRUE}
+ggplot(svDt, aes(x=MDS1, y=MDS2, color=isActivated))+
+geom_point(size=2)+
+scale_color_manual(values=cbbPalette)+
+theme_bw()
+```
+
+###### Library Size
+```{r, error=TRUE}
+ggplot(svDt, aes(x=MDS1, y=MDS2, color=lib_size))+
+geom_point(size=2)+
+scale_color_viridis()+
+guides(color=guide_legend(title="Library Size"))+
+theme_bw()
+```
+
+###### Amplitude
+```{r, error=TRUE}
+seSub <- se[,!(se$actual_cell_name %in% exDepol)]
+mdsDims <- plotMDS(assays(seSub)$corrected, plot=FALSE)[c("x", "y")]
+mdsDt <- as.data.table(mdsDims)
+colnames(mdsDt) <- c("MDS1", "MDS2")
+mdsDt <- cbind(mdsDt, as.data.table(colData(se)))
+setnames(mdsDt, c("epsc.ampl...pA."), c("ampl_pa"))
+
+ggplot(mdsDt, aes(x=MDS1, y=MDS2, color=ampl_pa))+
+geom_point(size=2)+
+geom_text_repel(aes(label=actual_cell_name))+
+scale_color_viridis(option="A")+
+guides(color=guide_legend(title="Amplitude (pA)"))+
+theme_bw()
+```
+
+###### Spiking
+```{r, error=TRUE}
+seSub <- se[,!(se$actual_cell_name %in% exSpike)]
+mdsDims <- plotMDS(assays(seSub)$corrected, 
+                   top=20, plot=FALSE)[c("x", "y")]
+
+mdsDt <- as.data.table(mdsDims)
+colnames(mdsDt) <- c("MDS1", "MDS2")
+mdsDt <- cbind(mdsDt, as.data.table(colData(se)))
+setnames(mdsDt, c("spiking..Hz."), c("spike_h"))
+
+mdsDt[,spike_h:=as.integer(spike_h)]
+ggplot(mdsDt, aes(x=MDS1, y=MDS2, color=spike_h))+
+geom_point(size=2)+
+geom_text_repel(aes(label=actual_cell_name))+
+scale_color_viridis(option="A")+
+guides(color=guide_legend(title="Spiking (Hz)"))+
+theme_bw()
+```
+
+###### Frequency
+```{r, error=TRUE}
+seSub <- se[,!(se$actual_cell_name %in% exDepol)]
+mdsDims <- plotMDS(assays(seSub)$corrected, plot=FALSE)[c("x", "y")]
+mdsDt <- as.data.table(mdsDims)
+colnames(mdsDt) <- c("MDS1", "MDS2")
+mdsDt <- cbind(mdsDt, as.data.table(colData(se)))
+setnames(mdsDt, c("epsc.ampl...pA."), c("ampl_pa"))
+
+ggplot(mdsDt, aes(x=MDS1, y=MDS2, color=ampl_pa))+
+geom_point(size=2)+
+geom_text_repel(aes(label=actual_cell_name))+
+scale_color_viridis(option="A")+
+guides(color=guide_legend(title="Amplitude (pA)"))+
+theme_bw()
+```
+
+##### PCA plots {.tabset}
+
+###### Batch
+```{r, error=TRUE}
+pcaCor <- pca(assays(se)$corrected, removeVar = 0.1)
+pcaCorDt<- cbind(pcaCor$rotated[,paste0("PC", 1:10)], colData(se))
+
+ggplot(pcaCorDt, aes(x=PC1, y=PC2, color=batch))+
+geom_point(size=2)+
+scale_color_manual(values=cbbPalette)+
+theme_bw()
+```
+
+###### Group
+```{r, error=TRUE}
+ggplot(pcaCorDt, aes(x=PC1, y=PC2, color=isActivated))+
+geom_point(size=2)+
+scale_color_manual(values=cbbPalette)+
+theme_bw()
+```
+
+###### Library Size
+```{r, error=TRUE}
+pcaCorDt$lib_size <- colSums(assays(se)$counts)
+ggplot(pcaCorDt, aes(x=PC1, y=PC2, color=lib_size))+
+geom_point(size=2)+
+geom_text_repel(aes(label=actual_cell_name))+
+guides(color=guide_legend(title="Library Size"))+
+theme_bw()
+```
+
+###### Amplitude
+```{r, error=TRUE}
+seSub <- se[,!(se$actual_cell_name %in% exDepol)]
+pcaCor <- pca(assays(seSub)$corrected, removeVar = 0.1)
+pcaCorDt<- cbind(pcaCor$rotated[,paste0("PC", 1:10)], colData(seSub))
+pcaCorDt <- as.data.table(pcaCorDt)
+
+ggplot(pcaCorDt, aes(x=PC1, y=PC2, color=`epsc ampl. (pA)`))+
+geom_point(size=2)+
+geom_text_repel(aes(label=actual_cell_name))+
+guides(color=guide_legend(title="Amplitude (pA)"))+
+scale_color_viridis(option="A")+
+theme_bw()  
+  
+ggplot(pcaCorDt, aes(x=PC3, y=PC4, color=`epsc ampl. (pA)`))+
+geom_point(size=2)+
+geom_text_repel(aes(label=actual_cell_name))+
+guides(color=guide_legend(title="Amplitude (pA)"))+
+scale_color_viridis(option="A")+
+theme_bw()  
+```
+
+###### Spiking
+```{r, error=TRUE}
+seSub <- se[,!(se$actual_cell_name %in% exSpike)]
+pcaCor <- pca(assays(seSub)$corrected, removeVar = 0.1)
+pcaCorDt<- cbind(pcaCor$rotated[,paste0("PC", 1:10)], colData(seSub))
+pcaCorDt <- as.data.table(pcaCorDt)
+pcaCorDt[,spike_hz:=as.integer(`spiking (Hz)`)]
+
+ggplot(pcaCorDt, aes(x=PC1, y=PC2, color=freq_hz))+
+geom_point(size=2)+
+geom_text_repel(aes(label=actual_cell_name))+
+guides(color=guide_legend(title="Spiking (Hz)"))+
+scale_color_viridis(option="A")+
+theme_bw()  
+  
+ggplot(pcaCorDt, aes(x=PC3, y=PC4, color=freq_hz))+
+geom_point(size=2)+
+geom_text_repel(aes(label=actual_cell_name))+
+guides(color=guide_legend(title="Spiking (Hz)"))+
+scale_color_viridis(option="A")+
+theme_bw()  
+```
+
+###### Frequency
+```{r, error=TRUE}
+seSub <- se[,!(se$actual_cell_name %in% exDepol)]
+pcaCor <- pca(assays(seSub)$corrected, removeVar = 0.1)
+pcaCorDt<- cbind(pcaCor$rotated[,paste0("PC", 1:10)], colData(seSub))
+pcaCorDt <- as.data.table(pcaCorDt)
+pcaCorDt[,freq_hz:=as.integer(`epsc frequ. (Hz)`)]
+
+ggplot(pcaCorDt, aes(x=PC1, y=PC2, color=freq_hz))+
+geom_point(size=2)+
+geom_text_repel(aes(label=actual_cell_name))+
+guides(color=guide_legend(title="Frequency (Hz)"))+
+scale_color_viridis(option="A")+
+theme_bw()  
+  
+ggplot(pcaCorDt, aes(x=PC3, y=PC4, color=freq_hz))+
+geom_point(size=2)+
+geom_text_repel(aes(label=actual_cell_name))+
+guides(color=guide_legend(title="Frequency (Hz)"))+
+scale_color_viridis(option="A")+
+theme_bw()  
+```
+
+
 
 ## 1. Discrete condition: Differential expression analysis
 
@@ -225,6 +401,40 @@ lrt$mean_counts <- rowMeans(assays(se)$counts[rownames(lrt),])
 lrt$name <- rownames(lrt)
 write.table(lrt, file=file.path(outDataDir, "02.1_miRNA_found.csv"), sep=",", 
             quote=FALSE, row.names=FALSE)
+```
+
+
+## Continuous analysis
+
+```{r, continuous coefficient analysis, error=TRUE}
+se <- readRDS(seDir)
+seSub <- se[,!is.na(se$`ampl`)]
+seSub <- seSub[rowSums(assays(seSub)$counts>0)!=0,]
+
+dds <- edgeR::calcNormFactors(DGEList(assay(seSub),method="TMMwsp"))
+assays(seSub)$logcpm <- log1p(cpm(dds))
+dds <- dds[filterByExpr(dds, min.count=1, min.prop=0.5),] # group=se$isActivated
+dim(dds)
+
+seSub$PA_scaled <- scale(seSub$`ampl`)
+seSub <- SEtools::svacor(seSub, form=~PA_scaled+batch,
+                                form0=~batch, 
+                                method="svaseq", 
+                                n.sv=1)
+
+mm <- model.matrix(~SV1+PA_scaled, data=as.data.frame(colData(seSub)))
+dds <- estimateDisp(dds, mm)
+
+edgeR::plotBCV(dds)
+
+lrt <- as.data.frame(topTags(glmQLFTest(glmQLFit(dds,mm, coef="PA_scaled"), 
+                                        coef="PA_scaled"), Inf))
+lrt$feature <- row.names(lrt)
+rowData(se)$DEA.cont_analysis <- lrt[match(rownames(se), lrt$feature),]
+attr(rowData(se)$DEA.cont_analysis, "description") <- "Continuous coefficient comparison: scaled Amplitude"
+
+setorder(lrt, PValue)
+head(lrt)
 ```
 
 ## Session info

@@ -29,8 +29,9 @@ suppressPackageStartupMessages({
 
 ```{r}
 metaPath <- params$meta_path
-meta <- fread(metaPath, col.names=c("isActivated", "actual_name", "fgcz_name", "batch"),
-              select=1:4, header=TRUE)
+meta <- fread(metaPath, col.names=c("isActivated", "actual_name", 
+                                    "fgcz_name", "batch", "ampl"),
+              select=c(1:4,6), header=TRUE)
 meta[,fgcz_name:=fifelse(fgcz_name=="", actual_name, fgcz_name)]
 head(meta)
 ```
@@ -69,10 +70,12 @@ col3Dt <- merge(col2Dt, meta,
                 by.x=c("actual_cell_name", "batch"), 
                 by.y=c("actual_name", "batch"), 
                 all.x=TRUE)
-col3Dt[,to_be_removed:=fifelse(!complete.cases(col3Dt), TRUE, FALSE)]
+col3Dt[,to_be_removed:=fifelse(!complete.cases(col3Dt[,setdiff(colnames(col3Dt), 
+                                                               "ampl"),
+                                                       with=FALSE]), TRUE, FALSE)]
 col3Dt[!complete.cases(col3Dt),]
 col3Dt <- col3Dt[,c("rn", "batch", "actual_cell_name", "to_be_removed", 
-                    "cell_name", "isActivated"), with=FALSE]
+                    "cell_name", "isActivated", "ampl"), with=FALSE]
 setnames(col3Dt, c("rn", "cell_name"), c("sample_name", "fgcz_name"))
 
 colData(se)$actual_cell_name <- col3Dt[match(rownames(colData(se)), 
@@ -85,6 +88,8 @@ colData(se)$to_be_removed <- col3Dt[match(rownames(colData(se)),
                                           col3Dt$sample_name),]$to_be_removed
 colData(se)$batch <- col3Dt[match(rownames(colData(se)), 
                                   col3Dt$sample_name),]$batch
+colData(se)$ampl <- col3Dt[match(rownames(colData(se)), 
+                                  col3Dt$sample_name),]$ampl
 saveRDS(se, file=file.path(params$out_dir, "01_sports_se.rds"))
 ```
 

@@ -111,11 +111,11 @@ rule construct_se:
                                                  meta_path="../{params.meta_path}"))'
     """
 
-
 #TODO: check filtering reads stats first!!    
 rule quality_plots:
   input:
-    se=rules.construct_se.output.se
+    se=rules.construct_se.output.se,
+    ephys_path="ephys.csv"
   output:
     se="out_data/02_sports_se.rds",
     output_html="out_data/02_overview_plots.html"
@@ -132,6 +132,7 @@ rule quality_plots:
                                     "html_document", 
                                      output_file="../{output.output_html}",
                                      params=list(se_dir="../{input.se}",
+                                                 ephys_path="../{input.ephys_path}",
                                                  out_data_dir="../{params.out_data_dir}",
                                                  out_plots_dir="../{params.out_plot_dir}"))'
     
