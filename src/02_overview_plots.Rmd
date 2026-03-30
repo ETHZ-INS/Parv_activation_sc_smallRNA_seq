@@ -274,7 +274,7 @@ cor(mdsDt$Clean_Reads, mdsDt$lib_size)
 ```{r, error=TRUE}
 ggplot(mdsDt, aes(x=MDS1, y=MDS2, color=as.factor(batch)))+
 geom_point(size=2)+
-geom_text_repel(aes(label=actual_cell_name))+
+geom_text_repel(aes(label=actual_cell_name), show.legend=FALSE)+
 scale_color_manual(values=cbbPalette)+
 guides(color=guide_legend(title="Batch"))+
 theme_bw()
@@ -286,9 +286,9 @@ ggsave(file.path(outPlotDir, "02.1_mds_batch.png"),
 ```{r, error=TRUE}
 ggplot(mdsDt, aes(x=MDS1, y=MDS2, color=lib_size))+
 geom_point(size=2)+
-geom_text_repel(aes(label=actual_cell_name))+
+geom_text_repel(aes(label=actual_cell_name), show.legend=FALSE)+
 scale_color_viridis()+
-guides(color=guide_legend(title="Library Size"))+
+guides(color=guide_colorbar(title="Library Size"))+
 theme_bw()
 ggsave(file.path(outPlotDir, "02.1_mds_library_size.png"),
        device="png", width=20, units="cm")
@@ -298,7 +298,7 @@ ggsave(file.path(outPlotDir, "02.1_mds_library_size.png"),
 ```{r, error=TRUE}
 ggplot(mdsDt, aes(x=MDS1, y=MDS2, color=isActivated))+
 geom_point(size=2)+
-geom_text_repel(aes(label=actual_cell_name))+
+geom_text_repel(aes(label=actual_cell_name), show.legend=FALSE)+
 scale_color_manual(values=cbbPalette)+
 guides(color=guide_legend(title="Activation"))+
 theme_bw()
