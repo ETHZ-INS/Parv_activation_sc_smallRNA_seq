@@ -278,6 +278,8 @@ geom_text_repel(aes(label=actual_cell_name))+
 scale_color_manual(values=cbbPalette)+
 guides(color=guide_legend(title="Batch"))+
 theme_bw()
+ggsave(file.path(outPlotDir, "02.1_mds_batch.png"),
+       device="png", width=20, units="cm")
 ```
 
 ##### Library size
@@ -288,6 +290,8 @@ geom_text_repel(aes(label=actual_cell_name))+
 scale_color_viridis()+
 guides(color=guide_legend(title="Library Size"))+
 theme_bw()
+ggsave(file.path(outPlotDir, "02.1_mds_library_size.png"),
+       device="png", width=20, units="cm")
 ```
 
 ##### Group 
@@ -298,6 +302,8 @@ geom_text_repel(aes(label=actual_cell_name))+
 scale_color_manual(values=cbbPalette)+
 guides(color=guide_legend(title="Activation"))+
 theme_bw()
+ggsave(file.path(outPlotDir, "02.1_mds_activation.png"),
+       device="png", width=20, units="cm")
 ```
 
 ##### Amplitude
@@ -307,15 +313,23 @@ seSub <- se[,!(se$actual_cell_name %in% exDepol)]
 mdsDims <- plotMDS(assays(seSub)$logcpm, top=20, plot=FALSE)[c("x", "y")]
 mdsDt <- as.data.table(mdsDims)
 colnames(mdsDt) <- c("MDS1", "MDS2")
-mdsDt <- cbind(mdsDt, as.data.table(colData(se)))
+mdsDt <- cbind(mdsDt, as.data.table(colData(seSub)))
 setnames(mdsDt, c("epsc.ampl...pA."), c("ampl_pa"))
+mdsDt[,missing_amp:=fifelse(is.na(ampl_pa), TRUE, FALSE)]
 
-ggplot(mdsDt, aes(x=MDS1, y=MDS2, color=ampl_pa))+
-geom_point(size=2)+
-geom_text_repel(aes(label=actual_cell_name))+
-scale_color_viridis(option="A")+
-guides(color=guide_legend(title="Amplitude (pA)"))+
+ggplot(mdsDt, aes(x=MDS1, y=MDS2, color=ampl_pa, 
+                  alpha=missing_amp))+
+geom_point(size=2.5)+
+geom_text_repel(aes(label=actual_cell_name), 
+                show.legend = FALSE)+
+scale_color_viridis(option="C")+
+guides(color = guide_colorbar(title="Amplitude (pA)"))+
+scale_alpha_manual(values = c("FALSE" = 1, 
+                              "TRUE" = 0.5),
+                   guide = "none")+
 theme_bw()
+ggsave(file.path(outPlotDir, "02.1_mds_amplitude.png"),
+       device="png", width=20, units="cm")
 ```
 
 ##### Spiking 
@@ -325,16 +339,22 @@ mdsDims <- plotMDS(assays(seSub)$logcpm, top=20, plot=FALSE)[c("x", "y")]
 
 mdsDt <- as.data.table(mdsDims)
 colnames(mdsDt) <- c("MDS1", "MDS2")
-mdsDt <- cbind(mdsDt, as.data.table(colData(se)))
+mdsDt <- cbind(mdsDt, as.data.table(colData(seSub)))
 setnames(mdsDt, c("spiking..Hz."), c("spike_h"))
 
 mdsDt[,spike_h:=as.integer(spike_h)]
-ggplot(mdsDt, aes(x=MDS1, y=MDS2, color=spike_h))+
-geom_point(size=2)+
-geom_text_repel(aes(label=actual_cell_name))+
-scale_color_viridis(option="A")+
-guides(color=guide_legend(title="Spiking (Hz)"))+
+mdsDt[,missing_spike:=fifelse(is.na(spike_h), TRUE, FALSE)]
+ggplot(mdsDt, aes(x=MDS1, y=MDS2, color=spike_h, alpha=missing_spike))+
+geom_point(size=2.5)+
+geom_text_repel(aes(label=actual_cell_name), show.legend=FALSE)+
+scale_color_viridis(option="C")+
+scale_alpha_manual(values = c("FALSE" = 1, 
+                              "TRUE" = 0.5),
+                   guide = "none")+
+guides(color = guide_colorbar(title="Spiking (Hz)"))+
 theme_bw()
+ggsave(file.path(outPlotDir, "02.1_mds_spiking.png"),
+       device="png", width=20, units="cm")
 ```
 
 ##### Frequency
@@ -344,15 +364,21 @@ seSub <- se[,!(se$actual_cell_name %in% exDepol)]
 mdsDims <- plotMDS(assays(seSub)$logcpm, top=20, plot=FALSE)[c("x", "y")]
 mdsDt <- as.data.table(mdsDims)
 colnames(mdsDt) <- c("MDS1", "MDS2")
-mdsDt <- cbind(mdsDt, as.data.table(colData(se)))
+mdsDt <- cbind(mdsDt, as.data.table(colData(seSub)))
 setnames(mdsDt, c("epsc.frequ...Hz."), c("freq_hz"))
+mdsDt[,missing_freq:=fifelse(is.na(freq_hz), TRUE, FALSE)]
 
-ggplot(mdsDt, aes(x=MDS1, y=MDS2, color=freq_hz))+
-geom_point(size=2)+
-geom_text_repel(aes(label=actual_cell_name))+
-scale_color_viridis(option="A")+
-guides(color=guide_legend(title="Freq. (Hz)"))+
+ggplot(mdsDt, aes(x=MDS1, y=MDS2, color=freq_hz, alpha=missing_freq))+
+geom_point(size=2.5)+
+geom_text_repel(aes(label=actual_cell_name), show.legend=FALSE)+
+scale_color_viridis(option="C")+
+guides(color = guide_colorbar(title="Frequency (Hz)"))+
+scale_alpha_manual(values = c("FALSE" = 1, 
+                              "TRUE" = 0.5),
+                   guide = "none")+
 theme_bw()
+ggsave(file.path(outPlotDir, "02.1_mds_frequency.png"),
+       device="png", width=20, units="cm")
 ```
 
 #### PCA {.tabset}
@@ -371,14 +397,22 @@ pcaCompCpm$lib_size <- colSums(assays(se)$counts)
 ##### Group
 ```{r, error=TRUE}
 ggplot(pcaCompCpm, aes(x=PC1, y=PC2, color=isActivated))+
-geom_point(size=2)+
+geom_point(size=2.5)+
+geom_text_repel(aes(label=actual_cell_name), show.legend=FALSE)+
 guides(color=guide_legend(title="Activation"))+
+labs(x=paste0("PC1: ", round(pcaCpm$variance[1], 1), "% variance explained"),
+     y=paste0("PC2: ", round(pcaCpm$variance[2], 1), "% variance explained"))+
 scale_color_manual(values=cbbPalette)+
 theme_bw()  
+ggsave(file.path(outPlotDir, "02.1_pca_activation.png"),
+       device="png", width=20, units="cm")
   
 ggplot(pcaCompCpm, aes(x=PC3, y=PC4, color=isActivated))+
-geom_point(size=2)+
+geom_point(size=2.5)+
+geom_text_repel(aes(label=actual_cell_name), show.legend=FALSE)+
 guides(color=guide_legend(title="Activation"))+
+labs(x=paste0("PC3: ", round(pcaCpm$variance[3], 1), "% variance explained"),
+     y=paste0("PC4: ", round(pcaCpm$variance[4], 1), "% variance explained"))+
 scale_color_manual(values=cbbPalette)+
 theme_bw()  
 ```
@@ -386,15 +420,21 @@ theme_bw()
 ##### Batch
 ```{r, error=TRUE}
 ggplot(pcaCompCpm, aes(x=PC1, y=PC2, color=as.factor(batch)))+
-geom_point(size=2)+
-geom_text_repel(aes(label=actual_cell_name))+
+geom_point(size=2.5)+
+geom_text_repel(aes(label=actual_cell_name), show.legend=FALSE)+
+labs(x=paste0("PC1: ", round(pcaCpm$variance[1], 1), "% variance explained"),
+     y=paste0("PC2: ", round(pcaCpm$variance[2], 1), "% variance explained"))+
 guides(color=guide_legend(title="Batch"))+
 scale_color_manual(values=cbbPalette)+
 theme_bw()  
+ggsave(file.path(outPlotDir, "02.1_pca_batch.png"),
+       device="png", width=20, units="cm")
   
 ggplot(pcaCompCpm, aes(x=PC3, y=PC4, color=as.factor(batch)))+
-geom_point(size=2)+
-geom_text_repel(aes(label=actual_cell_name))+
+geom_point(size=2.5)+
+geom_text_repel(aes(label=actual_cell_name), show.legend=FALSE)+
+labs(x=paste0("PC3: ", round(pcaCpm$variance[3], 1), "% variance explained"),
+     y=paste0("PC4: ", round(pcaCpm$variance[4], 1), "% variance explained"))+
 guides(color=guide_legend(title="Batch"))+
 scale_color_manual(values=cbbPalette)+
 theme_bw()  
@@ -403,17 +443,23 @@ theme_bw()
 ##### Library Size
 ```{r, error=TRUE}
 ggplot(pcaCompCpm, aes(x=PC1, y=PC2, color=lib_size))+
-geom_point(size=2)+
-geom_text_repel(aes(label=actual_cell_name))+
-guides(color=guide_legend(title="Library Size"))+
-scale_color_viridis()+
+geom_point(size=2.5)+
+geom_text_repel(aes(label=actual_cell_name), show.legend=FALSE)+
+labs(x=paste0("PC1: ", round(pcaCpm$variance[1], 1), "% variance explained"),
+     y=paste0("PC2: ", round(pcaCpm$variance[2], 1), "% variance explained"))+
+scale_color_viridis() +
+guides(color = guide_colorbar(title="Library Size"))+
 theme_bw()  
+ggsave(file.path(outPlotDir, "02.1_pca_library_size.png"),
+       device="png", width=20, units="cm")
   
 ggplot(pcaCompCpm, aes(x=PC3, y=PC4, color=lib_size))+
-geom_point(size=2)+
+geom_point(size=2.5)+
 geom_text_repel(aes(label=actual_cell_name))+
-guides(color=guide_legend(title="Library Size"))+
-scale_color_viridis()+
+labs(x=paste0("PC3: ", round(pcaCpm$variance[3], 1), "% variance explained"),
+     y=paste0("PC4: ", round(pcaCpm$variance[4], 1), "% variance explained"))+
+scale_color_viridis() +
+guides(color = guide_colorbar(title="Library Size"))+
 theme_bw()  
 ```
 
@@ -424,21 +470,33 @@ lcpmSub <- assays(seSub)$logcpm
 lcpmSub <- lcpmSub[rowSums(lcpmSub>0)>20,]
 pcaCpm <- pca(lcpmSub, metadata=colData(seSub))
 pcaCompCpm <- cbind(pcaCpm$rotated[,paste0("PC", 1:10)], colData(seSub))
-pcaCompCpm$isActivated <- as.factor(pcaCompCpm$isActivated)
+pcaCompCpm <- as.data.table(pcaCompCpm)
+pcaCompCpm[,amp_missing:=fifelse(is.na(`epsc ampl. (pA)`), TRUE, FALSE)]
 
-ggplot(pcaCompCpm, aes(x=PC1, y=PC2, color=`epsc ampl. (pA)`))+
-geom_point(size=2)+
-geom_text_repel(aes(label=actual_cell_name))+
-guides(color=guide_legend(title="Amplitude (pA)"))+
-scale_color_viridis(option="A")+
-theme_bw()  
+
+ggplot(pcaCompCpm, aes(x=PC1, y=PC2, color=`epsc ampl. (pA)`, 
+                       alpha=amp_missing))+
+geom_point(size=2.5)+
+geom_text_repel(aes(label=actual_cell_name), show.legend=FALSE)+
+labs(x=paste0("PC1: ", round(pcaCpm$variance[1], 1), "% variance explained"),
+     y=paste0("PC2: ", round(pcaCpm$variance[2], 1), "% variance explained"))+
+guides(color = guide_colorbar(title="Amplitude (pA)"))+
+scale_alpha_manual(values = c("FALSE" = 1, 
+                              "TRUE" = 0.5),
+                   guide = "none")+
+scale_color_viridis(option="C")+
+theme_bw()
+ggsave(file.path(outPlotDir, "02.1_pca_amplitude.png"),
+       device="png", width=20, units="cm")
   
 ggplot(pcaCompCpm, aes(x=PC3, y=PC4, color=`epsc ampl. (pA)`))+
-geom_point(size=2)+
-geom_text_repel(aes(label=actual_cell_name))+
-guides(color=guide_legend(title="Amplitude (pA)"))+
-scale_color_viridis(option="A")+
-theme_bw()  
+geom_point(size=2.5)+
+geom_text_repel(aes(label=actual_cell_name), show.legend=FALSE)+
+labs(x=paste0("PC3: ", round(pcaCpm$variance[3], 1), "% variance explained"),
+     y=paste0("PC4: ", round(pcaCpm$variance[4], 1), "% variance explained"))+
+guides(color = guide_colorbar(title="Amplitude (pA)"))+
+scale_color_viridis(option="C")+
+theme_bw() 
 ```
 
 ##### Spiking
@@ -450,19 +508,33 @@ pcaCpm <- pca(lcpmSub, metadata=colData(seSub))
 pcaCompCpm <- cbind(pcaCpm$rotated[,paste0("PC", 1:10)], colData(seSub))
 pcaCompCpm <- as.data.table(pcaCompCpm)
 pcaCompCpm[,spike_hz:=as.integer(`spiking (Hz)`)]
+pcaCompCpm[,spike_missing:=fifelse(is.na(spike_hz), TRUE, FALSE)]
 
-ggplot(pcaCompCpm, aes(x=PC1, y=PC2, color=spike_hz))+
-geom_point(size=2)+
-geom_text_repel(aes(label=actual_cell_name))+
-guides(color=guide_legend(title="Spiking (Hz)"))+
-scale_color_viridis(option="A")+
+
+ggplot(pcaCompCpm, aes(x=PC1, y=PC2, color=spike_hz, alpha=spike_missing))+
+geom_point(size=2.5)+
+geom_text_repel(aes(label=actual_cell_name), show.legend=FALSE)+
+labs(x=paste0("PC1: ", round(pcaCpm$variance[1], 1), "% variance explained"),
+     y=paste0("PC2: ", round(pcaCpm$variance[2], 1), "% variance explained"))+
+guides(color = guide_colorbar(title="Spiking (Hz)"))+
+scale_alpha_manual(values = c("FALSE" = 1, 
+                              "TRUE" = 0.5),
+                   guide = "none")+
+scale_color_viridis(option="C")+
 theme_bw()  
+ggsave(file.path(outPlotDir, "02.1_pca_spiking.png"),
+       device="png", width=20, units="cm")
   
-ggplot(pcaCompCpm, aes(x=PC3, y=PC4, color=spike_hz))+
-geom_point(size=2)+
-geom_text_repel(aes(label=actual_cell_name))+
-guides(color=guide_legend(title="Spiking (Hz)"))+
-scale_color_viridis(option="A")+
+ggplot(pcaCompCpm, aes(x=PC3, y=PC4, color=spike_hz, alpha=spike_missing))+
+geom_point(size=2.5)+
+geom_text_repel(aes(label=actual_cell_name), show.legend=FALSE)+
+labs(x=paste0("PC3: ", round(pcaCpm$variance[3], 1), "% variance explained"),
+     y=paste0("PC4: ", round(pcaCpm$variance[4], 1), "% variance explained"))+
+guides(color = guide_colorbar(title="Spiking (Hz)"))+
+scale_alpha_manual(values = c("FALSE" = 1, 
+                              "TRUE" = 0.5),
+                   guide = "none")+
+scale_color_viridis(option="C")+
 theme_bw()  
 ```
 
@@ -475,19 +547,32 @@ pcaCpm <- pca(lcpmSub, metadata=colData(seSub))
 pcaCompCpm <- cbind(pcaCpm$rotated[,paste0("PC", 1:10)], colData(seSub))
 pcaCompCpm <- as.data.table(pcaCompCpm)
 pcaCompCpm[,freq_hz:=as.integer(`epsc frequ. (Hz)`)]
+pcaCompCpm[,freq_missing:=fifelse(is.na(freq_hz), TRUE, FALSE)]
 
-ggplot(pcaCompCpm, aes(x=PC1, y=PC2, color=freq_hz))+
-geom_point(size=2)+
-geom_text_repel(aes(label=actual_cell_name))+
-guides(color=guide_legend(title="Frequency (Hz)"))+
-scale_color_viridis(option="A")+
+ggplot(pcaCompCpm, aes(x=PC1, y=PC2, color=freq_hz, alpha=freq_missing))+
+geom_point(size=2.5)+
+geom_text_repel(aes(label=actual_cell_name), show.legend=FALSE)+
+labs(x=paste0("PC1: ", round(pcaCpm$variance[1], 1), "% variance explained"),
+     y=paste0("PC2: ", round(pcaCpm$variance[2], 1), "% variance explained"))+
+guides(color = guide_colorbar(title="Frequency (Hz)"))+
+scale_alpha_manual(values = c("FALSE" = 1, 
+                              "TRUE" = 0.5),
+                   guide = "none")+
+scale_color_viridis(option="C")+
 theme_bw()  
+ggsave(file.path(outPlotDir, "02.1_pca_frequency.png"),
+       device="png", width=20, units="cm")
   
-ggplot(pcaCompCpm, aes(x=PC3, y=PC4, color=freq_hz))+
-geom_point(size=2)+
-geom_text_repel(aes(label=actual_cell_name))+
-guides(color=guide_legend(title="Frequency (Hz)"))+
-scale_color_viridis(option="A")+
+ggplot(pcaCompCpm, aes(x=PC3, y=PC4, color=freq_hz, alpha=freq_missing))+
+geom_point(size=2.5)+
+geom_text_repel(aes(label=actual_cell_name), show.legend=FALSE)+
+labs(x=paste0("PC3: ", round(pcaCpm$variance[3], 1), "% variance explained"),
+     y=paste0("PC4: ", round(pcaCpm$variance[4], 1), "% variance explained"))+
+guides(color = guide_colorbar(title="Frequency (Hz)"))+
+scale_alpha_manual(values = c("FALSE" = 1, 
+                              "TRUE" = 0.5),
+                   guide = "none")+
+scale_color_viridis(option="C")+
 theme_bw()  
 ```
 

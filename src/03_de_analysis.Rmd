@@ -138,7 +138,7 @@ seSub <- se[,!(se$actual_cell_name %in% exDepol)]
 mdsDims <- plotMDS(assays(seSub)$corrected, plot=FALSE)[c("x", "y")]
 mdsDt <- as.data.table(mdsDims)
 colnames(mdsDt) <- c("MDS1", "MDS2")
-mdsDt <- cbind(mdsDt, as.data.table(colData(se)))
+mdsDt <- cbind(mdsDt, as.data.table(colData(seSub)))
 setnames(mdsDt, c("epsc.ampl...pA."), c("ampl_pa"))
 
 ggplot(mdsDt, aes(x=MDS1, y=MDS2, color=ampl_pa))+
@@ -157,7 +157,7 @@ mdsDims <- plotMDS(assays(seSub)$corrected,
 
 mdsDt <- as.data.table(mdsDims)
 colnames(mdsDt) <- c("MDS1", "MDS2")
-mdsDt <- cbind(mdsDt, as.data.table(colData(se)))
+mdsDt <- cbind(mdsDt, as.data.table(colData(seSub)))
 setnames(mdsDt, c("spiking..Hz."), c("spike_h"))
 
 mdsDt[,spike_h:=as.integer(spike_h)]
@@ -175,7 +175,7 @@ seSub <- se[,!(se$actual_cell_name %in% exDepol)]
 mdsDims <- plotMDS(assays(seSub)$corrected, plot=FALSE)[c("x", "y")]
 mdsDt <- as.data.table(mdsDims)
 colnames(mdsDt) <- c("MDS1", "MDS2")
-mdsDt <- cbind(mdsDt, as.data.table(colData(se)))
+mdsDt <- cbind(mdsDt, as.data.table(colData(seSub)))
 setnames(mdsDt, c("epsc.ampl...pA."), c("ampl_pa"))
 
 ggplot(mdsDt, aes(x=MDS1, y=MDS2, color=ampl_pa))+
@@ -247,14 +247,14 @@ pcaCorDt<- cbind(pcaCor$rotated[,paste0("PC", 1:10)], colData(seSub))
 pcaCorDt <- as.data.table(pcaCorDt)
 pcaCorDt[,spike_hz:=as.integer(`spiking (Hz)`)]
 
-ggplot(pcaCorDt, aes(x=PC1, y=PC2, color=freq_hz))+
+ggplot(pcaCorDt, aes(x=PC1, y=PC2, color=spike_hz))+
 geom_point(size=2)+
 geom_text_repel(aes(label=actual_cell_name))+
 guides(color=guide_legend(title="Spiking (Hz)"))+
 scale_color_viridis(option="A")+
 theme_bw()  
   
-ggplot(pcaCorDt, aes(x=PC3, y=PC4, color=freq_hz))+
+ggplot(pcaCorDt, aes(x=PC3, y=PC4, color=spike_hz))+
 geom_point(size=2)+
 geom_text_repel(aes(label=actual_cell_name))+
 guides(color=guide_legend(title="Spiking (Hz)"))+
